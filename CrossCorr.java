@@ -1,5 +1,5 @@
 import java.io.IOException;
-
+import java.util.Arrays; 
 public class CrossCorr {
 
     public static RGBImage makeGray(RGBImage img) {
@@ -19,13 +19,21 @@ public class CrossCorr {
     // expect img to be a color image
     // expect mask to be a blurring mask whose values all add up to 1
     // assuming the mask is odd width and odd height
-    public static RGBImage crossCorrelate(double[][] mask, RGBImage img, int flag, int value) {
+    public static RGBImage crossCorrelate(double[][] mask, RGBImage img, int flag, double threshold) {
         RGBImage grayInput = makeGray(img);
         RGBImage resultImage = new RGBImage(grayInput);
 
         int halfMaskWidth = mask[0].length / 2; // half the # of cols
         int halfMaskHeight = mask.length / 2; // half the # of rows
-
+        double total = 0;
+        if(flag == 1) {
+        //do a divide by the total of the mask before outputting new pixel
+                for (int i=0; i<mask.length; i++) {
+	                for (int j=0; j<mask[i].length; j++) {
+		                total+=mask[i][j];
+		        }
+                 }
+        }
         for (int r = halfMaskHeight; r < grayInput.getNumRows() - halfMaskHeight; r++) {
 
             for (int c = halfMaskWidth; c < grayInput.getNumCols() - halfMaskWidth; c++) {
@@ -34,32 +42,99 @@ public class CrossCorr {
                 double result = 0;
                 for (int mr = 0; mr < mask.length; mr++) {
                     for (int mc = 0; mc < mask[mr].length; mc++) {
-
                         result += mask[mr][mc]
                                 * grayInput.getPixel(r + mr - halfMaskHeight, c + mc - halfMaskWidth).getRed();
-
                     }
-
                 }
-
-                resultImage.setPixel(r, c, (int) result, (int) result, (int) result);
+                if (flag == 0) {
+                    resultImage.setPixel(r, c, (int) result, (int) result, (int) result);
+                }
+                else if(flag == 1) {
+                    double resultNorm = result/total;
+                    resultImage.setPixel(r, c, (int) resultNorm, (int) resultNorm, (int) resultNorm);
+                }
+                else if(flag == 2) {
+                    int resultbw;
+                    if(Math.abs(result) < threshold) {
+                            resultbw = 0;
+                    }
+                    else {
+                            resultbw = 255;
+                    }
+                    resultImage.setPixel(r, c, resultbw, resultbw, resultbw);
+                }
+                        
             }
 
         }
 
         return resultImage;
     }
+    public static RGBImage convole (double[][] mask, RGBImage img, int flag, double threshold) {
+                   // int median = mask.getNumsRows/2;
+                    double temp = 0;
+            for (int row = 0; row < mask.length/2; row++) {
+                for (int col = 0; col < mask.length; col++) {
+                        temp = mask[mask.length-row-1][col];
+                        mask[mask.length-row-1][col] = mask[row][col];
+                        mask[row][col] = temp; 
+                }
+            }
+        for (int col = 0; col < mask.length/2; col++) {
+              for (int row = 0; row < mask.length; row++) {
+                        temp = mask[mask.length-col-1][row];
+                        mask[mask.length-col-1][row] = mask[col][row];
+                        mask[col][row] = temp; 
+                }
+        }
 
-    public static void checkFlag (int flag) {
-        if(flag == 1) {
-        //do a divide by the total of the mask before outputting new pixel
-        }
-        else if(flag == 2) {
-            //output only 0 or 255 depending on the comparison of the Math.abs(sum) to the threshold.
-        }
+
+            return img;
+            
     }
+    
+    public static RGBImage medianFiltering(RGBImage img, int widthHeight) {
+        RGBImage resultImage = new RGBImage(img);
+        int half = (widthHeight-1)/2;
+        int [] pixels = new int[widthHeight*widthHeight];
+        int numPixels = 0;
+        for(int row = 0; row < img.getNumRows(); row++) {
+                for (int col = 0; col < img.getNumCols(); col++) {
+                        int lowRow = row - half;
+                        int highRow = row + half;
+                        int lowCol = col - half;
+                        int highCol = col + half;
+                        numPixels = 0;
+                        for(int rowTwo = lowRow; rowTwo < highRow; rowTwo++) {
+                           for(int colTwo = lowCol; colTwo < highCol; colTwo++) {
+                                   if(rowTwo < 0 || rowTwo > img.getNumRows()) {
+                                           continue;
+                                   }
+                                   if(colTwo < 0 || colTwo > img.getNumCols()) {
+                                           continue;
+                                   }
+                                   if(rowTwo == row && colTwo == col) {
+                                           continue;
+                                   }
+                                   pixels[numPixels] = img.getPixel(rowTwo,colTwo).getGreen();
+                                   numPixels++;
+                           }
+                                
+                        }
+                        Arrays.sort(pixels,0,numPixels);
+                        int median = pixels[numPixels/2];
+                       RGBPixel pixel = new RGBPixel(median,median,median);
+                        resultImage.setPixel(row,col,pixel);
+                }
+                
+        }
+        return resultImage;
 
+    }
     public static void main(String[] args) throws IOException {
+        double sobelHorizontal [][] = {{-1,0,1},{-2,0,2},{-1,1,0}};
+        double sobelVertical [][] = {{-1,-2,-1},{0,0,0},{1,2,3}};
+        double testMask [][] =  {{1,1,1},{0,0,0},{2,2,2}};
         double blurMask[][] = { { 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49 },
                 { 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49 },
                 { 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49, 1.0 / 49 },
@@ -138,8 +213,19 @@ public class CrossCorr {
         RGBImage inImg = new RGBImage(args[0]); // reads the image on disk with name args[0] and creates an RGBImage
                                                 // object
         RGBImage blurredImg;
-        blurredImg = crossCorrelate(gaussianV4, inImg);
-        blurredImg.writeImage("blurred13x13V4-" + args[0]);
+        RGBImage medianImage;
+        RGBImage sobelHor;
+        RGBImage sobelVer;
+        RGBImage testMa;
+        testMa = convole(testMask, inImg,0,0);
+        blurredImg = crossCorrelate(gaussianV4, inImg,0,0);
+        // blurredImg.writeImage("blurred13x13V4-" + args[0]);
+       
+       sobelVer  = crossCorrelate(sobelVertical, inImg,2,200);
+       //sobelVer.writeImage("sobelVertical-" + args[0]);
+        
+        medianImage = medianFiltering(inImg,3);
+        medianImage.writeImage("median-saltpepper" + args[0]);
     }
 
 }
